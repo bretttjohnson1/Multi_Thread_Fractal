@@ -1,2 +1,2 @@
 all:
-	gcc compute.c -o compute.o -lpthread
+	gcc compute.c -o compute.o -lpthread -lm

@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
+#include <math.h>
 #include <semaphore.h>
 #define DIAMOND 0
 #define SQUARE 1
@@ -13,9 +14,10 @@ struct job {
 	int layer;
 };
 
+double *points;
 job *job_que;
 int num_threads;
-int layers = 8;
+int layers = 2;
 int current_layer = 0;
 
 int wait_count = 0;
@@ -27,16 +29,48 @@ int wait_count = 0;
 void *worker(void* number);
 int main(int argc,char **argsv){
 	if(argc!=2) {
-      printf("wrong number of arguments\n");
+		printf("wrong number of arguments\n");
 		exit(1);
 	}
 	const char *str_size = argsv[1];
 	num_threads = atoi(str_size)-1;
-   fflush(stdout);
 	/*pthread_mutex_init(&mutex_parent,NULL); //TODO check if returns -1 and print perror if so
-	pthread_cond_init(&cond_parent_go,NULL);
-	pthread_mutex_init(&mutex_child,NULL);
-	pthread_cond_init(&cond_child_go,NULL);*/
+	   pthread_cond_init(&cond_parent_go,NULL);
+	   pthread_mutex_init(&mutex_child,NULL);
+	   pthread_cond_init(&cond_child_go,NULL);*/
+	int length  = pow(2,layers)+1;
+	job_que = malloc(sizeof(job)*length*length);
+	double *points = malloc(sizeof(double)*length*length);
+
+	int index = 0;
+	for(int a =0; a<layers; a++) {
+		int squarelength = (length-1)/pow(2,a);
+      //printf("%d\n",squarelength );
+		for(int b =0; b<length-2; b+=squarelength) {
+			for(int c = 0; c<length-2; c+=squarelength) {
+				job_que[index].x = b+squarelength/2;
+				job_que[index].y = c+squarelength/2;
+				job_que[index].method = DIAMOND;
+				job_que[index].layer = a;
+				//printf("DIAMOND %d %d\n",job_que[index].x,job_que[index].y);
+				index++;
+			}
+		}
+      int row = 0;
+		for(int b  = 0; b<length; b+=squarelength/2) {
+         //printf("%d\n",(row%2==0) );
+			for(int c =squarelength/2*(row%2==0); c<length; c+=squarelength) {
+				job_que[index].x = c;
+				job_que[index].y = b;
+				job_que[index].method = SQUARE;
+				job_que[index].layer = a;
+				//printf("SQUARE %d %d\n",job_que[index].y,job_que[index].x);
+				index++;
+			}
+         row++;
+		}
+
+	}
 
 	pthread_t tids[num_threads];
 	pthread_attr_t attrs[num_threads];
@@ -48,12 +82,12 @@ int main(int argc,char **argsv){
 	}
 	for(int a =0; a<layers; a++) {
 		current_layer = a;
-      while(wait_count!=num_threads);
-      wait_count=0;
-      /*pthread_cond_signal(&cond_child_go);
-		pthread_mutex_lock(&mutex_parent);
-      pthread_mutex_lock(&mutex_child);
-		pthread_cond_wait(&cond_parent_go,&mutex_parent);*/
+		while(wait_count!=num_threads) ;
+		wait_count=0;
+		/*pthread_cond_signal(&cond_child_go);
+		          pthread_mutex_lock(&mutex_parent);
+		   pthread_mutex_lock(&mutex_child);
+		          pthread_cond_wait(&cond_parent_go,&mutex_parent);*/
 
 	}
 	for(int a =0; a<num_threads; a++) {
@@ -68,24 +102,24 @@ void *worker(void *number){
 	/*
 	   TODO read from job que
 	 */
-    int *thread_number;
-    thread_number = number;
+	int *thread_number;
+	thread_number = number;
 	for(int a =0; a<layers; a++) {
-      if(a!=current_layer)wait_count++;
-      while(a!=current_layer);
+		if(a!=current_layer) wait_count++;
+		while(a!=current_layer) ;
 
-      /*if(a!=current_layer){
-         while(a)
-         running_count--;
-         pthread_cond_signal(&cond_parent_go);
-         printf("waiting... %d %d\n",current_layer,*thread_number );
-         pthread_cond_wait(&cond_child_go,&mutex_child);
-         printf("went... %d %d\n",current_layer,*thread_number );
+		/*if(a!=current_layer){
+		   while(a)
+		   running_count--;
+		   pthread_cond_signal(&cond_parent_go);
+		   printf("waiting... %d %d\n",current_layer,*thread_number );
+		   pthread_cond_wait(&cond_child_go,&mutex_child);
+		   printf("went... %d %d\n",current_layer,*thread_number );
 
-      }*/
+		   }*/
 
-      printf("hello %d %d\n",current_layer,*thread_number );
+		printf("hello %d %d\n",current_layer,*thread_number );
 	}
-   wait_count++;
+	wait_count++;
 	pthread_exit(0);
 }
