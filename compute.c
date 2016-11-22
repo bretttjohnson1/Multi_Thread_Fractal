@@ -17,7 +17,7 @@ struct job {
 };
 int num_threads;
 
-double *points;
+float *points;
 
 job *job_que;
 uint64_t job_que_length;
@@ -26,9 +26,11 @@ int *tasks_per_layer;
 int task_count = 0;
 sem_t task_count_mutex;
 
-int layers = 5;
+int layers = 6;
 int current_layer = 0;
 uint64_t side_length; //side_length of one side of the grid
+
+float noise = 1;
 
 //pthread_cond_t cond_parent_go;
 //pthread_mutex_t mutex_parent;
@@ -38,11 +40,13 @@ uint64_t side_length; //side_length of one side of the grid
 void *worker(void* number);
 int main(int argc,char **argsv){
 	if(argc!=2) {
+      //printf("%ld %ld\n",sizeof(float),sizeof(double) );
 		printf("wrong number of arguments\n");
 		exit(1);
 	}
+   srand(time(NULL));
 	const char *str_size = argsv[1];
-	num_threads = atoi(str_size);
+	num_threads = atoi(str_size)-1;
 	/*pthread_mutex_init(&mutex_parent,NULL); //TODO check if returns -1 and print perror if so
 	   pthread_cond_init(&cond_parent_go,NULL);
 	   pthread_mutex_init(&mutex_child,NULL);
@@ -56,6 +60,10 @@ int main(int argc,char **argsv){
 
    }
 	points = malloc(sizeof(double)*side_length*side_length);
+   points[0] = 5;
+   points[side_length-1] = 2;
+   points[side_length*(side_length-1)+1] = 2;
+   points[side_length*side_length-1] = -2;
 	tasks_per_layer = malloc(sizeof(int)*layers);
 	sem_init(&task_count_mutex,0,1);
    //printf("made it\n");
@@ -115,8 +123,9 @@ int main(int argc,char **argsv){
 	}
    FILE *f;
    f = fopen("output.dat","wb");
+   fprintf(f, "%d\n",layers);
    for(int a =0;a<side_length*side_length;a++){
-      fprintf(f, "%f ",points[a]);
+      fprintf(f, "%f\n",points[a]);
    }
    fclose(f);
 	sem_destroy(&task_count_mutex);
@@ -157,14 +166,14 @@ void *worker(void *number){
 		   }*/
 
 		if(method==DIAMOND) {
-			double avg = 0;
+			float avg = 0;
 			avg+=points[x-squareside_length/2+(y-squareside_length/2)*side_length]/4;
 			avg+=points[x+squareside_length/2+(y-squareside_length/2)*side_length]/4;
 			avg+=points[x-squareside_length/2+(y+squareside_length/2)*side_length]/4;
 			avg+=points[x+squareside_length/2+(y+squareside_length/2)*side_length]/4;
-			points[x+y*side_length] = avg;
+			points[x+y*side_length] = avg + (double)(rand()/(float)RAND_MAX)*noise;
 		}else if(SQUARE) {
-			double avg = 0;
+			float avg = 0;
 			if(x == 0) {
             //printf("%d %d %d %d\n",x,y, squareside_length/2, side_length );
             avg+=points[x+squareside_length/2+y*side_length]/3;
@@ -193,6 +202,7 @@ void *worker(void *number){
 
 
 			}
+         points[x+side_length*y] = avg + (double)(rand()/RAND_MAX)*noise;
 		}
 		//printf("hello %d %d %d %d\n",job_layer,y,x,*thread_number );
 		sem_wait(&task_count_mutex);
