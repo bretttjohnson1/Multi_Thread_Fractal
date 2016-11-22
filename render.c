@@ -60,7 +60,7 @@ void moveandrotate(){
 void init(int width, int height){
 	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 	glClearDepth(1.0);
-   glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
+   //glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
 	glDepthFunc(GL_LESS);
 	glEnable(GL_DEPTH_TEST);
 	glMatrixMode(GL_PROJECTION);
@@ -83,11 +83,12 @@ void draw(){
 	glTranslatef(offx,offy,offz);
 	glScalef(.01,.01,.01);
 	glRotatef(thet,0,1,0);
-	glColor3f(0,255,0);
+
 
 	//gettimeofday(&begin, NULL);
    for(int a  = 0;a<side_length-1;a++)
 	for(long b = 0; b<side_length-1; b++) {
+      glColor3f(0,.5/(pow(1+1/(double)(layers*layers),-points[a+b*side_length])),.5/(pow(1+1/(double)(layers*layers),-points[a+b*side_length])));
 		if(a%(side_length-1)!=0) {
 			glBegin(GL_TRIANGLES);
 			      glVertex3f(b,points[a+b*side_length],a);

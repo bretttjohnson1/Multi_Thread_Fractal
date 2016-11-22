@@ -30,12 +30,11 @@ int *tasks_per_layer;
 int task_count = 0;
 sem_t task_count_mutex;
 
-int layers = 8;
+int layers = 10;
 int current_layer = 0;
 uint64_t side_length; //side_length of one side of the grid
 
-float noise = 1;
-int num_smooths=3;
+float noise = .5; //multiplied to random value. more noise = more variation
 
 //pthread_cond_t cond_parent_go;
 //pthread_mutex_t mutex_parent;
@@ -236,27 +235,22 @@ void * smooth_worker(void * number){
 	int *thread_number;
 	thread_number = number;
 	printf("%d\n",*thread_number );
-	for(int s = 0; s<num_smooths; s++) {
-		for(int h = *thread_number; h<(side_length)*(side_length); h+=num_threads) {
-			int a = h/side_length;
-			int b = h%side_length;
-			float average = 0;
-			float count = 0;
-			for(int i = a-1; i<=a+1; i++) {
-				for(int j = b-1; j<=b+1; j++) {
-					if(i>=0 && j>=0 && i<side_length && j<side_length) {
-						average+=points[i+j*side_length];
-						count++;
-					}
+	for(int h = *thread_number; h<(side_length)*(side_length); h+=num_threads) {
+		int a = h/side_length;
+		int b = h%side_length;
+		float average = 0;
+		float count = 0;
+		for(int i = a-1; i<=a+1; i++) {
+			for(int j = b-1; j<=b+1; j++) {
+				if(i>=0 && j>=0 && i<side_length && j<side_length) {
+					average+=points[i+j*side_length];
+					count++;
 				}
-				smoothed_points[h] = average/count;
 			}
+			smoothed_points[h] = average/count;
 		}
-      if(num_smooths!=1)
-      for(int h = *thread_number; h<(side_length)*(side_length); h+=num_threads) {
-         points[h] = smoothed_points[h];
-      }
-
 	}
+
+
 	pthread_exit(0);
 }
