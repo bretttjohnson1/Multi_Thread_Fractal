@@ -4,8 +4,11 @@
 #include <math.h>
 #include <stdint.h>
 #include <semaphore.h>
+#include <sys/time.h>
 #define DIAMOND 0
 #define SQUARE 1
+
+
 
 typedef struct job job;
 struct job {
@@ -26,7 +29,7 @@ int *tasks_per_layer;
 int task_count = 0;
 sem_t task_count_mutex;
 
-int layers = 6;
+int layers = 13;
 int current_layer = 0;
 uint64_t side_length; //side_length of one side of the grid
 
@@ -44,6 +47,8 @@ int main(int argc,char **argsv){
 		printf("wrong number of arguments\n");
 		exit(1);
 	}
+   struct timeval begin,end;
+   gettimeofday(&begin, NULL);
    srand(time(NULL));
 	const char *str_size = argsv[1];
 	num_threads = atoi(str_size)-1;
@@ -60,10 +65,10 @@ int main(int argc,char **argsv){
 
    }
 	points = malloc(sizeof(double)*side_length*side_length);
-   points[0] = 5;
-   points[side_length-1] = 2;
+   points[0] = 0;
+   points[side_length-1] = 0;
    points[side_length*(side_length-1)+1] = 2;
-   points[side_length*side_length-1] = -2;
+   points[side_length*side_length-1] = -5;
 	tasks_per_layer = malloc(sizeof(int)*layers);
 	sem_init(&task_count_mutex,0,1);
    //printf("made it\n");
@@ -121,6 +126,9 @@ int main(int argc,char **argsv){
 	for(int a =0; a<num_threads; a++) {
 		pthread_join(tids[a],NULL);
 	}
+   gettimeofday(&end,NULL);
+   printf("Took %ld seconds\n",end.tv_sec-begin.tv_sec );
+   printf("Writing...\n" );
    FILE *f;
    f = fopen("output.dat","wb");
    fprintf(f, "%d\n",layers);
@@ -132,7 +140,6 @@ int main(int argc,char **argsv){
 	free(job_que);
 	free(points);
 	free(tasks_per_layer);
-
 }
 
 void *worker(void *number){
@@ -171,7 +178,7 @@ void *worker(void *number){
 			avg+=points[x+squareside_length/2+(y-squareside_length/2)*side_length]/4;
 			avg+=points[x-squareside_length/2+(y+squareside_length/2)*side_length]/4;
 			avg+=points[x+squareside_length/2+(y+squareside_length/2)*side_length]/4;
-			points[x+y*side_length] = avg + (double)(rand()/(float)RAND_MAX)*noise;
+			points[x+y*side_length] = avg + (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer);
 		}else if(SQUARE) {
 			float avg = 0;
 			if(x == 0) {
@@ -202,7 +209,7 @@ void *worker(void *number){
 
 
 			}
-         points[x+side_length*y] = avg + (double)(rand()/RAND_MAX)*noise;
+         points[x+side_length*y] = avg +  (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer);
 		}
 		//printf("hello %d %d %d %d\n",job_layer,y,x,*thread_number );
 		sem_wait(&task_count_mutex);
