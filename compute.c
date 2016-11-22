@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <math.h>
+#include <stdint.h>
 #include <semaphore.h>
 #define DIAMOND 0
 #define SQUARE 1
@@ -12,21 +13,22 @@ struct job {
 	int y;
 	char method; //diamond or square
 	int layer;
+	int squareside_length;
 };
 int num_threads;
 
 double *points;
 
 job *job_que;
-int job_que_length;
+uint64_t job_que_length;
 
 int *tasks_per_layer;
 int task_count = 0;
 sem_t task_count_mutex;
 
-int layers = 10;
+int layers = 5;
 int current_layer = 0;
-int side_length; //side_length of one side of the grid
+uint64_t side_length; //side_length of one side of the grid
 
 //pthread_cond_t cond_parent_go;
 //pthread_mutex_t mutex_parent;
@@ -46,40 +48,47 @@ int main(int argc,char **argsv){
 	   pthread_mutex_init(&mutex_child,NULL);
 	   pthread_cond_init(&cond_child_go,NULL);*/
 	side_length  = pow(2,layers)+1;
-   job_que_length = side_length*side_length-4;
+	job_que_length = side_length*side_length-4;
 	job_que = malloc(sizeof(job)*(job_que_length));
-	points = malloc(sizeof(double)*side_length*side_length);
-   tasks_per_layer = malloc(sizeof(int)*layers);
-   sem_init(&task_count_mutex,0,1);
+   if(job_que == NULL){
+      printf("Not enough memory\n");
+      exit(1);
 
+   }
+	points = malloc(sizeof(double)*side_length*side_length);
+	tasks_per_layer = malloc(sizeof(int)*layers);
+	sem_init(&task_count_mutex,0,1);
+   //printf("made it\n");
 	int index = 0;
 	for(int a =0; a<layers; a++) {
-      int layer_index = 0;
+		int layer_index = 0;
 		int squareside_length = (side_length-1)/pow(2,a);
-		for(int b =0; b<side_length-2; b+=squareside_length) {
-			for(int c = 0; c<side_length-2; c+=squareside_length) {
+		for(int b =0; b<side_length-1; b+=squareside_length) {
+			for(int c = 0; c<side_length-1; c+=squareside_length) {
 				job_que[index].x = b+squareside_length/2;
 				job_que[index].y = c+squareside_length/2;
 				job_que[index].method = DIAMOND;
 				job_que[index].layer = a;
+				job_que[index].squareside_length = squareside_length;
 				index++;
-            layer_index++;
+				layer_index++;
 			}
 		}
-      int row = 0;
+		int row = 0;
 		for(int b  = 0; b<side_length; b+=squareside_length/2) {
 			for(int c =squareside_length/2*(row%2==0); c<side_length; c+=squareside_length) {
 				job_que[index].x = c;
 				job_que[index].y = b;
 				job_que[index].method = SQUARE;
 				job_que[index].layer = a;
+				job_que[index].squareside_length = squareside_length;
 				//printf("SQUARE %d %d\n",job_que[index].y,job_que[index].x);
 				index++;
-            layer_index++;
+				layer_index++;
 			}
-         row++;
+			row++;
 		}
-      tasks_per_layer[a] = layer_index;
+		tasks_per_layer[a] = layer_index;
 	}
 
 	pthread_t tids[num_threads];
@@ -92,7 +101,7 @@ int main(int argc,char **argsv){
 	}
 	for(int a =0; a<layers; a++) {
 		current_layer = a;
-      printf("tasks needed %d\n",tasks_per_layer[a] );
+		printf("tasks needed %d\n",tasks_per_layer[a] );
 		while(task_count<tasks_per_layer[a]) ;
 		task_count=0;
 		/*pthread_cond_signal(&cond_child_go);
@@ -104,29 +113,37 @@ int main(int argc,char **argsv){
 	for(int a =0; a<num_threads; a++) {
 		pthread_join(tids[a],NULL);
 	}
-   sem_destroy(&task_count_mutex);
-   free(job_que);
-   free(points);
-   free(tasks_per_layer);
+   FILE *f;
+   f = fopen("output.dat","wb");
+   for(int a =0;a<side_length*side_length;a++){
+      fprintf(f, "%f ",points[a]);
+   }
+   fclose(f);
+	sem_destroy(&task_count_mutex);
+	free(job_que);
+	free(points);
+	free(tasks_per_layer);
 
 }
 
 void *worker(void *number){
 	int *thread_number;
 	thread_number = number;
-   //printf("%d\n",*thread_number);
-   job current_job;
-   int job_layer;
-   int x;
-   int y;
-   char method;
+	//printf("%d\n",*thread_number);
+	job current_job;
+	int job_layer;
+	int x;
+	int y;
+	char method;
+	int squareside_length;
 	for(int a =*thread_number; a<job_que_length; a+=num_threads) {
-      current_job = job_que[a];
-      x = current_job.x;
-      y = current_job.y;
-      method = current_job.method;
-      job_layer = current_job.layer;
-      //printf("%d\n",job_layer );
+		current_job = job_que[a];
+		x = current_job.x;
+		y = current_job.y;
+		method = current_job.method;
+		job_layer = current_job.layer;
+		squareside_length = current_job.squareside_length;
+		//printf("%d\n",job_layer );
 		while(job_layer>current_layer) ;
 
 		/*if(a!=current_layer){
@@ -138,10 +155,49 @@ void *worker(void *number){
 		   printf("went... %d %d\n",current_layer,*thread_number );
 
 		   }*/
-		printf("hello %d %d %d %d\n",job_layer,y,x,*thread_number );
-      sem_wait(&task_count_mutex);
-      task_count++;
-      sem_post(&task_count_mutex);
+
+		if(method==DIAMOND) {
+			double avg = 0;
+			avg+=points[x-squareside_length/2+(y-squareside_length/2)*side_length]/4;
+			avg+=points[x+squareside_length/2+(y-squareside_length/2)*side_length]/4;
+			avg+=points[x-squareside_length/2+(y+squareside_length/2)*side_length]/4;
+			avg+=points[x+squareside_length/2+(y+squareside_length/2)*side_length]/4;
+			points[x+y*side_length] = avg;
+		}else if(SQUARE) {
+			double avg = 0;
+			if(x == 0) {
+            //printf("%d %d %d %d\n",x,y, squareside_length/2, side_length );
+            avg+=points[x+squareside_length/2+y*side_length]/3;
+				avg+=points[x+(y-squareside_length/2)*side_length]/3;
+				avg+=points[x+(y+squareside_length/2)*side_length]/3;
+			}else if(y == 0) {
+				avg+=points[x+squareside_length/2+y*side_length]/3;
+				avg+=points[x-squareside_length/2+y*side_length]/3;
+				avg+=points[x+(y+squareside_length/2)*side_length]/3;
+
+			}else if(x==side_length-1) {
+				avg+=points[x-squareside_length/2+y*side_length]/3;
+				avg+=points[x+(y-squareside_length/2)*side_length]/3;
+				avg+=points[x+(y+squareside_length/2)*side_length]/3;
+
+			}else if(y == side_length-1) {
+				avg+=points[x+squareside_length/2+y*side_length]/3;
+				avg+=points[x-squareside_length/2+y*side_length]/3;
+				avg+=points[x+(y-squareside_length/2)*side_length]/3;
+
+			}else{
+				avg+=points[x+squareside_length/2+y*side_length]/4;
+				avg+=points[x-squareside_length/2+y*side_length]/4;
+				avg+=points[x+(y-squareside_length/2)*side_length]/4;
+				avg+=points[x+(y+squareside_length/2)*side_length]/4;
+
+
+			}
+		}
+		//printf("hello %d %d %d %d\n",job_layer,y,x,*thread_number );
+		sem_wait(&task_count_mutex);
+		task_count++;
+		sem_post(&task_count_mutex);
 	}
 	pthread_exit(0);
 }
