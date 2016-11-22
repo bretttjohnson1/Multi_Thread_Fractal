@@ -21,6 +21,7 @@ struct job {
 int num_threads;
 
 float *points;
+float *smoothed_points;
 
 job *job_que;
 uint64_t job_que_length;
@@ -29,27 +30,29 @@ int *tasks_per_layer;
 int task_count = 0;
 sem_t task_count_mutex;
 
-int layers = 13;
+int layers = 8;
 int current_layer = 0;
 uint64_t side_length; //side_length of one side of the grid
 
 float noise = 1;
+int num_smooths=3;
 
 //pthread_cond_t cond_parent_go;
 //pthread_mutex_t mutex_parent;
 //pthread_cond_t cond_child_go;
 //pthread_mutex_t mutex_child;
 
+void *smooth_worker(void *number);
 void *worker(void* number);
 int main(int argc,char **argsv){
 	if(argc!=2) {
-      //printf("%ld %ld\n",sizeof(float),sizeof(double) );
+		//printf("%ld %ld\n",sizeof(float),sizeof(double) );
 		printf("wrong number of arguments\n");
 		exit(1);
 	}
-   struct timeval begin,end;
-   gettimeofday(&begin, NULL);
-   srand(time(NULL));
+	struct timeval begin,end;
+	gettimeofday(&begin, NULL);
+	srand(time(NULL));
 	const char *str_size = argsv[1];
 	num_threads = atoi(str_size)-1;
 	/*pthread_mutex_init(&mutex_parent,NULL); //TODO check if returns -1 and print perror if so
@@ -59,19 +62,19 @@ int main(int argc,char **argsv){
 	side_length  = pow(2,layers)+1;
 	job_que_length = side_length*side_length-4;
 	job_que = malloc(sizeof(job)*(job_que_length));
-   if(job_que == NULL){
-      printf("Not enough memory\n");
-      exit(1);
+	if(job_que == NULL) {
+		printf("Not enough memory\n");
+		exit(1);
 
-   }
+	}
 	points = malloc(sizeof(double)*side_length*side_length);
-   points[0] = 0;
-   points[side_length-1] = 0;
-   points[side_length*(side_length-1)+1] = 2;
-   points[side_length*side_length-1] = -5;
+	points[0] = 0;
+	points[side_length-1] = 0;
+	points[side_length*(side_length-1)+1] = 2;
+	points[side_length*side_length-1] = -5;
 	tasks_per_layer = malloc(sizeof(int)*layers);
 	sem_init(&task_count_mutex,0,1);
-   //printf("made it\n");
+	//printf("made it\n");
 	int index = 0;
 	for(int a =0; a<layers; a++) {
 		int layer_index = 0;
@@ -126,19 +129,30 @@ int main(int argc,char **argsv){
 	for(int a =0; a<num_threads; a++) {
 		pthread_join(tids[a],NULL);
 	}
-   gettimeofday(&end,NULL);
-   printf("Took %ld seconds\n",end.tv_sec-begin.tv_sec );
-   printf("Writing...\n" );
-   FILE *f;
-   f = fopen("output.dat","wb");
-   fprintf(f, "%d\n",layers);
-   for(int a =0;a<side_length*side_length;a++){
-      fprintf(f, "%f\n",points[a]);
-   }
-   fclose(f);
+	printf("Smoothing...\n");
+	smoothed_points = malloc(sizeof(float)*side_length*side_length);
+	for (int i = 0; i < num_threads; i++) {
+		pthread_attr_init(&attrs[i]);
+		pthread_create(&tids[i],&attrs[i],smooth_worker,&tnumber[i]);
+	}
+	for(int a =0; a<num_threads; a++) {
+		pthread_join(tids[a],NULL);
+	}
+	free(points);
+
+	gettimeofday(&end,NULL);
+	printf("Took %ld seconds\n",end.tv_sec-begin.tv_sec );
+	printf("Writing...\n" );
+	FILE *f;
+	f = fopen("output.dat","wb");
+	fprintf(f, "%d\n",layers);
+	for(int a =0; a<side_length*side_length; a++) {
+		fprintf(f, "%f\n",smoothed_points[a]);
+	}
+	fclose(f);
 	sem_destroy(&task_count_mutex);
 	free(job_que);
-	free(points);
+	free(smoothed_points);
 	free(tasks_per_layer);
 }
 
@@ -182,8 +196,8 @@ void *worker(void *number){
 		}else if(SQUARE) {
 			float avg = 0;
 			if(x == 0) {
-            //printf("%d %d %d %d\n",x,y, squareside_length/2, side_length );
-            avg+=points[x+squareside_length/2+y*side_length]/3;
+				//printf("%d %d %d %d\n",x,y, squareside_length/2, side_length );
+				avg+=points[x+squareside_length/2+y*side_length]/3;
 				avg+=points[x+(y-squareside_length/2)*side_length]/3;
 				avg+=points[x+(y+squareside_length/2)*side_length]/3;
 			}else if(y == 0) {
@@ -209,12 +223,40 @@ void *worker(void *number){
 
 
 			}
-         points[x+side_length*y] = avg +  (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer);
+			points[x+side_length*y] = avg +  (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer);
 		}
 		//printf("hello %d %d %d %d\n",job_layer,y,x,*thread_number );
 		sem_wait(&task_count_mutex);
 		task_count++;
 		sem_post(&task_count_mutex);
+	}
+	pthread_exit(0);
+}
+void * smooth_worker(void * number){
+	int *thread_number;
+	thread_number = number;
+	printf("%d\n",*thread_number );
+	for(int s = 0; s<num_smooths; s++) {
+		for(int h = *thread_number; h<(side_length)*(side_length); h+=num_threads) {
+			int a = h/side_length;
+			int b = h%side_length;
+			float average = 0;
+			float count = 0;
+			for(int i = a-1; i<=a+1; i++) {
+				for(int j = b-1; j<=b+1; j++) {
+					if(i>=0 && j>=0 && i<side_length && j<side_length) {
+						average+=points[i+j*side_length];
+						count++;
+					}
+				}
+				smoothed_points[h] = average/count;
+			}
+		}
+      if(num_smooths!=1)
+      for(int h = *thread_number; h<(side_length)*(side_length); h+=num_threads) {
+         points[h] = smoothed_points[h];
+      }
+
 	}
 	pthread_exit(0);
 }
