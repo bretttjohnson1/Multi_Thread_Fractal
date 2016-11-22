@@ -13,14 +13,21 @@ struct job {
 	char method; //diamond or square
 	int layer;
 };
+int num_threads;
 
 double *points;
-job *job_que;
-int num_threads;
-int layers = 2;
-int current_layer = 0;
 
-int wait_count = 0;
+job *job_que;
+int job_que_length;
+
+int *tasks_per_layer;
+int task_count = 0;
+sem_t task_count_mutex;
+
+int layers = 10;
+int current_layer = 0;
+int side_length; //side_length of one side of the grid
+
 //pthread_cond_t cond_parent_go;
 //pthread_mutex_t mutex_parent;
 //pthread_cond_t cond_child_go;
@@ -33,43 +40,46 @@ int main(int argc,char **argsv){
 		exit(1);
 	}
 	const char *str_size = argsv[1];
-	num_threads = atoi(str_size)-1;
+	num_threads = atoi(str_size);
 	/*pthread_mutex_init(&mutex_parent,NULL); //TODO check if returns -1 and print perror if so
 	   pthread_cond_init(&cond_parent_go,NULL);
 	   pthread_mutex_init(&mutex_child,NULL);
 	   pthread_cond_init(&cond_child_go,NULL);*/
-	int length  = pow(2,layers)+1;
-	job_que = malloc(sizeof(job)*length*length);
-	double *points = malloc(sizeof(double)*length*length);
+	side_length  = pow(2,layers)+1;
+   job_que_length = side_length*side_length-4;
+	job_que = malloc(sizeof(job)*(job_que_length));
+	points = malloc(sizeof(double)*side_length*side_length);
+   tasks_per_layer = malloc(sizeof(int)*layers);
+   sem_init(&task_count_mutex,0,1);
 
 	int index = 0;
 	for(int a =0; a<layers; a++) {
-		int squarelength = (length-1)/pow(2,a);
-      //printf("%d\n",squarelength );
-		for(int b =0; b<length-2; b+=squarelength) {
-			for(int c = 0; c<length-2; c+=squarelength) {
-				job_que[index].x = b+squarelength/2;
-				job_que[index].y = c+squarelength/2;
+      int layer_index = 0;
+		int squareside_length = (side_length-1)/pow(2,a);
+		for(int b =0; b<side_length-2; b+=squareside_length) {
+			for(int c = 0; c<side_length-2; c+=squareside_length) {
+				job_que[index].x = b+squareside_length/2;
+				job_que[index].y = c+squareside_length/2;
 				job_que[index].method = DIAMOND;
 				job_que[index].layer = a;
-				//printf("DIAMOND %d %d\n",job_que[index].x,job_que[index].y);
 				index++;
+            layer_index++;
 			}
 		}
       int row = 0;
-		for(int b  = 0; b<length; b+=squarelength/2) {
-         //printf("%d\n",(row%2==0) );
-			for(int c =squarelength/2*(row%2==0); c<length; c+=squarelength) {
+		for(int b  = 0; b<side_length; b+=squareside_length/2) {
+			for(int c =squareside_length/2*(row%2==0); c<side_length; c+=squareside_length) {
 				job_que[index].x = c;
 				job_que[index].y = b;
 				job_que[index].method = SQUARE;
 				job_que[index].layer = a;
 				//printf("SQUARE %d %d\n",job_que[index].y,job_que[index].x);
 				index++;
+            layer_index++;
 			}
          row++;
 		}
-
+      tasks_per_layer[a] = layer_index;
 	}
 
 	pthread_t tids[num_threads];
@@ -82,8 +92,9 @@ int main(int argc,char **argsv){
 	}
 	for(int a =0; a<layers; a++) {
 		current_layer = a;
-		while(wait_count!=num_threads) ;
-		wait_count=0;
+      printf("tasks needed %d\n",tasks_per_layer[a] );
+		while(task_count<tasks_per_layer[a]) ;
+		task_count=0;
 		/*pthread_cond_signal(&cond_child_go);
 		          pthread_mutex_lock(&mutex_parent);
 		   pthread_mutex_lock(&mutex_child);
@@ -93,20 +104,30 @@ int main(int argc,char **argsv){
 	for(int a =0; a<num_threads; a++) {
 		pthread_join(tids[a],NULL);
 	}
-
+   sem_destroy(&task_count_mutex);
+   free(job_que);
+   free(points);
+   free(tasks_per_layer);
 
 }
 
 void *worker(void *number){
-
-	/*
-	   TODO read from job que
-	 */
 	int *thread_number;
 	thread_number = number;
-	for(int a =0; a<layers; a++) {
-		if(a!=current_layer) wait_count++;
-		while(a!=current_layer) ;
+   //printf("%d\n",*thread_number);
+   job current_job;
+   int job_layer;
+   int x;
+   int y;
+   char method;
+	for(int a =*thread_number; a<job_que_length; a+=num_threads) {
+      current_job = job_que[a];
+      x = current_job.x;
+      y = current_job.y;
+      method = current_job.method;
+      job_layer = current_job.layer;
+      //printf("%d\n",job_layer );
+		while(job_layer>current_layer) ;
 
 		/*if(a!=current_layer){
 		   while(a)
@@ -117,9 +138,10 @@ void *worker(void *number){
 		   printf("went... %d %d\n",current_layer,*thread_number );
 
 		   }*/
-
-		printf("hello %d %d\n",current_layer,*thread_number );
+		printf("hello %d %d %d %d\n",job_layer,y,x,*thread_number );
+      sem_wait(&task_count_mutex);
+      task_count++;
+      sem_post(&task_count_mutex);
 	}
-	wait_count++;
 	pthread_exit(0);
 }
