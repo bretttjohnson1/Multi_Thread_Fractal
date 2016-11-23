@@ -27,33 +27,51 @@ job *job_que;
 uint64_t job_que_length;
 
 int *tasks_per_layer;
-int task_count = 0;
+int *task_count;
 sem_t task_count_mutex;
 
-int layers = 10;
+int layers = 8;
 int current_layer = 0;
 uint64_t side_length; //side_length of one side of the grid
 
 float noise = .5; //multiplied to random value. more noise = more variation
 
+sem_t *thread_sem;
 //pthread_cond_t cond_parent_go;
 //pthread_mutex_t mutex_parent;
 //pthread_cond_t cond_child_go;
 //pthread_mutex_t mutex_child;
 
+int sum(int *list,int num_threads);
 void *smooth_worker(void *number);
 void *worker(void* number);
 int main(int argc,char **argsv){
-	if(argc!=2) {
-		//printf("%ld %ld\n",sizeof(float),sizeof(double) );
-		printf("wrong number of arguments\n");
+
+	if(argc==4) {
+		const char *thread_num_str = argsv[1];
+		num_threads = atoi(thread_num_str)-1;
+		const char *layers_str = argsv[2];
+		layers = atoi(layers_str);
+		const char *noise_str = argsv[3];
+		sscanf(noise_str,"%f",&noise);
+	}else if(argc==3) {
+		const char *thread_num_str = argsv[1];
+		num_threads = atoi(thread_num_str)-1;
+		const char *layers_str = argsv[2];
+		layers = atoi(layers_str);
+	}else if(argc==2) {
+		const char *thread_num_str = argsv[1];
+		num_threads = atoi(thread_num_str)-1;
+	}else{
+		printf("Usage ./compute.o number_of_threads OR\n");
+		printf("Usage ./compute.o number_of_threads layers OR\n");
+		printf("Usage ./compute.o number_of_threads layers noise\n");
 		exit(1);
 	}
 	struct timeval begin,end;
 	gettimeofday(&begin, NULL);
 	srand(time(NULL));
-	const char *str_size = argsv[1];
-	num_threads = atoi(str_size)-1;
+
 	/*pthread_mutex_init(&mutex_parent,NULL); //TODO check if returns -1 and print perror if so
 	   pthread_cond_init(&cond_parent_go,NULL);
 	   pthread_mutex_init(&mutex_child,NULL);
@@ -97,7 +115,6 @@ int main(int argc,char **argsv){
 				job_que[index].method = SQUARE;
 				job_que[index].layer = a;
 				job_que[index].squareside_length = squareside_length;
-				//printf("SQUARE %d %d\n",job_que[index].y,job_que[index].x);
 				index++;
 				layer_index++;
 			}
@@ -105,10 +122,16 @@ int main(int argc,char **argsv){
 		}
 		tasks_per_layer[a] = layer_index;
 	}
+	thread_sem  = malloc(sizeof(sem_t)*(num_threads));
+	for(int a =0; a<num_threads-1; a++)
+		sem_init(&thread_sem[a],0,0);
+
+   task_count = malloc(sizeof(int)*num_threads);
 
 	pthread_t tids[num_threads];
 	pthread_attr_t attrs[num_threads];
 	int tnumber[num_threads];
+	printf("Computing Fractals...\n");
 	for (int i = 0; i < num_threads; i++) {
 		pthread_attr_init(&attrs[i]);
 		tnumber[i] = i;
@@ -116,13 +139,20 @@ int main(int argc,char **argsv){
 	}
 	for(int a =0; a<layers; a++) {
 		current_layer = a;
-		printf("tasks needed %d\n",tasks_per_layer[a] );
-		while(task_count<tasks_per_layer[a]) ;
-		task_count=0;
+
+		for(int b = 0; b<num_threads; b++)
+			sem_post(thread_sem+b);
+
+		while(sum(task_count,num_threads)<tasks_per_layer[a]) ;
+      for(int b = 0;b<num_threads;b++)
+		    task_count[b]=0;
+		printf("Layer %d done\n",a+1);
+		fflush(stdout);
 		/*pthread_cond_signal(&cond_child_go);
 		          pthread_mutex_lock(&mutex_parent);
 		   pthread_mutex_lock(&mutex_child);
 		          pthread_cond_wait(&cond_parent_go,&mutex_parent);*/
+
 
 	}
 	for(int a =0; a<num_threads; a++) {
@@ -140,7 +170,9 @@ int main(int argc,char **argsv){
 	free(points);
 
 	gettimeofday(&end,NULL);
-	printf("Took %ld seconds\n",end.tv_sec-begin.tv_sec );
+   printf("%lu\n",end.tv_usec );
+   printf("%lu\n",begin.tv_usec );
+	printf("Took %f seconds\n",end.tv_sec-begin.tv_sec+(end.tv_usec-begin.tv_usec)/1000000.0f);
 	printf("Writing...\n" );
 	FILE *f;
 	f = fopen("output.dat","wb");
@@ -148,6 +180,7 @@ int main(int argc,char **argsv){
 	for(int a =0; a<side_length*side_length; a++) {
 		fprintf(f, "%f\n",smoothed_points[a]);
 	}
+   free(thread_sem);
 	fclose(f);
 	sem_destroy(&task_count_mutex);
 	free(job_que);
@@ -173,7 +206,9 @@ void *worker(void *number){
 		job_layer = current_job.layer;
 		squareside_length = current_job.squareside_length;
 		//printf("%d\n",job_layer );
-		while(job_layer>current_layer) ;
+		while(job_layer>current_layer) {
+			sem_wait(&thread_sem[*thread_number]);
+		}
 
 		/*if(a!=current_layer){
 		   while(a)
@@ -225,16 +260,13 @@ void *worker(void *number){
 			points[x+side_length*y] = avg +  (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer);
 		}
 		//printf("hello %d %d %d %d\n",job_layer,y,x,*thread_number );
-		sem_wait(&task_count_mutex);
-		task_count++;
-		sem_post(&task_count_mutex);
+		task_count[*thread_number]++;
 	}
 	pthread_exit(0);
 }
 void * smooth_worker(void * number){
 	int *thread_number;
 	thread_number = number;
-	printf("%d\n",*thread_number );
 	for(int h = *thread_number; h<(side_length)*(side_length); h+=num_threads) {
 		int a = h/side_length;
 		int b = h%side_length;
@@ -253,4 +285,10 @@ void * smooth_worker(void * number){
 
 
 	pthread_exit(0);
+}
+int sum(int *list,int len){
+   int tot = 0;
+   for(int a =0;a<len;a++)
+      tot+=list[a];
+   return tot;
 }

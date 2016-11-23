@@ -11,8 +11,8 @@
 #include <stdlib.h>
 #include <errno.h>
 
-float offx=1.5f;
-float offy=0.0f;
+float offx=0.0f;
+float offy=-.5f;
 float offz=-6.0f;
 char keys[256];
 float phi=0;
@@ -29,38 +29,40 @@ void fail(){
 	exit(1);
 }
 
+struct timeval button_time;
 void moveandrotate(){
 	if(keys[32]) {
-		offy-=.05+keys[(int)'m'];
+		offy-=.05+.1*keys[(int)'m'];
 	}
 	if(keys[(int)'c'])
-		offy+=.05+keys[(int)'m'];
+		offy+=.05+.1*keys[(int)'m'];
 	if(keys[(int)'w']) {
-		offz+=.05+keys[(int)'m'];
+		offz+=.05+.1*keys[(int)'m'];
 	}
 	if(keys[(int)'s']) {
-		offz-=.05+keys[(int)'m'];
+		offz-=.05+.1*keys[(int)'m'];
 	}
 	if(keys[(int)'d']) {
-		offx-=.05+keys[(int)'m'];
+		offx-=.05+.1*keys[(int)'m'];
 	}
 	if(keys[(int)'a']) {
-		offx+=.05+keys[(int)'m'];
+		offx+=.05+.1*keys[(int)'m'];
 	}
 	if(keys[(int)'j'])
-		thet+=1;
+		thet+=1+2*keys[(int)'m'];
 	if(keys[(int)'l'])
-		thet+=-1;
+		thet-=1+2*keys[(int)'m'];
 	if(keys[(int)'i'])
-		phi+=1;
+		phi+=1+2*keys[(int)'m'];
 	if(keys[(int)'k'])
-		phi-=1;
+		phi-=1+2*keys[(int)'m'];
+
 }
 
 void init(int width, int height){
 	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 	glClearDepth(1.0);
-   //glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
+	//glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
 	glDepthFunc(GL_LESS);
 	glEnable(GL_DEPTH_TEST);
 	glMatrixMode(GL_PROJECTION);
@@ -86,23 +88,25 @@ void draw(){
 
 
 	//gettimeofday(&begin, NULL);
-   for(int a  = 0;a<side_length-1;a++)
-	for(long b = 0; b<side_length-1; b++) {
-      glColor3f(0,.5/(pow(1+1/(double)(layers*layers),-points[a+b*side_length])),.5/(pow(1+1/(double)(layers*layers),-points[a+b*side_length])));
-		if(a%(side_length-1)!=0) {
-			glBegin(GL_TRIANGLES);
-			      glVertex3f(b,points[a+b*side_length],a);
-               glVertex3f(b+1,points[a+(b+1)*side_length],a);
-               glVertex3f(b,points[a+1+b*side_length],(a+1));
-			glEnd();
-			glBegin(GL_TRIANGLES);
-            glVertex3f(b+1,points[a+(b+1)*side_length],a);
-            glVertex3f(b,points[a+1+b*side_length],(a+1));
-            glVertex3f(b+1,points[a+1+(b+1)*side_length],a+1);
-			glEnd();
-		}
+	for(int a  = 0; a<side_length-1; a++)
+		for(long b = 0; b<side_length-1; b++) {
+			glColor3f(.3/(pow(1.02+1/(double)(layers*layers),-points[a+b*side_length])),
+			          .5/(pow(1.01+1/(double)(layers*layers),-points[a+b*side_length])),
+			          .3/(pow(.98+1/(double)(layers*layers),-points[a+b*side_length])));
+			if(a%(side_length-1)!=0) {
+				glBegin(GL_TRIANGLES);
+				glVertex3f(b-side_length/2,points[a+b*side_length],a-side_length/2);
+				glVertex3f(b+1-side_length/2,points[a+(b+1)*side_length],a-side_length/2);
+				glVertex3f(b-side_length/2,points[a+1+b*side_length],(a+1)-side_length/2);
+				glEnd();
+				glBegin(GL_TRIANGLES);
+				glVertex3f(b+1-side_length/2,points[a+(b+1)*side_length],a-side_length/2);
+				glVertex3f(b-side_length/2,points[a+1+b*side_length],(a+1)-side_length/2);
+				glVertex3f(b+1-side_length/2,points[a+1+(b+1)*side_length],a+1-side_length/2);
+				glEnd();
+			}
 
-	}
+		}
 	//gettimeofday(&end,NULL);
 	//printf("points drawn in %lu ms\n",end.tv_usec-begin.tv_usec);
 
@@ -163,7 +167,7 @@ int main(int argc, char **argv){
 	glutInit(&b,argv);
 	glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE | GLUT_ALPHA | GLUT_DEPTH);
 	glutInitWindowSize(640,480);
-
+	offz = -1.5*side_length/100;
 	window = glutCreateWindow("DISPLAY");
 	glutDisplayFunc(&draw);
 	glutIdleFunc(&draw);
