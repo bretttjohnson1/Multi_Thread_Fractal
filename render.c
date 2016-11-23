@@ -11,6 +11,8 @@
 #include <stdlib.h>
 #include <errno.h>
 
+typedef struct color color;
+
 float offx=0.0f;
 float offy=-.5f;
 float offz=-6.0f;
@@ -22,6 +24,13 @@ int layers;
 float *points;
 int points_len;
 int side_length;
+color *color_array;
+
+struct color {
+	float r;
+	float g;
+	float b;
+};
 
 void fail(){
 	printf("Error %s \n",strerror(errno));
@@ -29,24 +38,23 @@ void fail(){
 	exit(1);
 }
 
-struct timeval button_time;
 void moveandrotate(){
 	if(keys[32]) {
-		offy-=.05+.1*keys[(int)'m'];
+		offy-=.05+.5*keys[(int)'m'];
 	}
 	if(keys[(int)'c'])
-		offy+=.05+.1*keys[(int)'m'];
+		offy+=.05+.5*keys[(int)'m'];
 	if(keys[(int)'w']) {
-		offz+=.05+.1*keys[(int)'m'];
+		offz+=.05+.5*keys[(int)'m'];
 	}
 	if(keys[(int)'s']) {
-		offz-=.05+.1*keys[(int)'m'];
+		offz-=.05+.5*keys[(int)'m'];
 	}
 	if(keys[(int)'d']) {
-		offx-=.05+.1*keys[(int)'m'];
+		offx-=.05+.5*keys[(int)'m'];
 	}
 	if(keys[(int)'a']) {
-		offx+=.05+.1*keys[(int)'m'];
+		offx+=.05+.5*keys[(int)'m'];
 	}
 	if(keys[(int)'j'])
 		thet+=1+2*keys[(int)'m'];
@@ -90,9 +98,7 @@ void draw(){
 	//gettimeofday(&begin, NULL);
 	for(int a  = 0; a<side_length-1; a++)
 		for(long b = 0; b<side_length-1; b++) {
-			glColor3f(.3/(pow(1.02+1/(double)(layers*layers),-points[a+b*side_length])),
-			          .5/(pow(1.01+1/(double)(layers*layers),-points[a+b*side_length])),
-			          .3/(pow(.98+1/(double)(layers*layers),-points[a+b*side_length])));
+			glColor3f(color_array[a+b*side_length].r,color_array[a+b*side_length].g,color_array[a+b*side_length].b);
 			if(a%(side_length-1)!=0) {
 				glBegin(GL_TRIANGLES);
 				glVertex3f(b-side_length/2,points[a+b*side_length],a-side_length/2);
@@ -128,9 +134,19 @@ void resize(int width,int height){
 	glMatrixMode(GL_MODELVIEW);
 
 }
+char polygon_mode = 1;
 void keyPressed(unsigned char key, int x, int y){
 	keys[key]=1;
 	usleep(100);
+   if(key == 'p'){
+      if(polygon_mode == 0){
+         glPolygonMode(GL_FRONT_AND_BACK, GL_LINE );
+         polygon_mode = 1;
+      }else if(polygon_mode == 1){
+         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+         polygon_mode = 0;
+      }
+   }
 	if(key == 27) {
 		glutDestroyWindow(window);
 		exit(0);
@@ -151,12 +167,14 @@ int main(int argc, char **argv){
 	printf("%d\n",layers );
 	points_len = (pow(2,layers)+1)*(pow(2,layers)+1);
 	points = malloc(points_len*sizeof(float));
+	color_array = malloc(points_len*sizeof(color));
 	side_length = pow(2,layers)+1;
 	int a =0;
 	while(getline(&p,&len,f)!=-1) {
 		sscanf(p, "%6f",points+a);
-		//printf("%f\n",fl );
-		//printf("%f\n",*(points+a) );
+		color_array[a].r = .3/(pow(1.03,-points[a]));
+		color_array[a].g = .6*sin(points[a]/(layers));
+		color_array[a].b = .3/(pow(.95,-points[a]));
 		a++;
 	}
 	//free(p);
@@ -167,7 +185,7 @@ int main(int argc, char **argv){
 	glutInit(&b,argv);
 	glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE | GLUT_ALPHA | GLUT_DEPTH);
 	glutInitWindowSize(640,480);
-	offz = -1.5*side_length/100;
+	offz = -1-side_length/100;
 	window = glutCreateWindow("DISPLAY");
 	glutDisplayFunc(&draw);
 	glutIdleFunc(&draw);

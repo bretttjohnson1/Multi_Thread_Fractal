@@ -37,11 +37,6 @@ uint64_t side_length; //side_length of one side of the grid
 float noise = .5; //multiplied to random value. more noise = more variation
 
 sem_t *thread_sem;
-//pthread_cond_t cond_parent_go;
-//pthread_mutex_t mutex_parent;
-//pthread_cond_t cond_child_go;
-//pthread_mutex_t mutex_child;
-
 int sum(int *list,int num_threads);
 void *smooth_worker(void *number);
 void *worker(void* number);
@@ -148,12 +143,6 @@ int main(int argc,char **argsv){
 		    task_count[b]=0;
 		printf("Layer %d done\n",a+1);
 		fflush(stdout);
-		/*pthread_cond_signal(&cond_child_go);
-		          pthread_mutex_lock(&mutex_parent);
-		   pthread_mutex_lock(&mutex_child);
-		          pthread_cond_wait(&cond_parent_go,&mutex_parent);*/
-
-
 	}
 	for(int a =0; a<num_threads; a++) {
 		pthread_join(tids[a],NULL);
@@ -170,8 +159,6 @@ int main(int argc,char **argsv){
 	free(points);
 
 	gettimeofday(&end,NULL);
-   printf("%lu\n",end.tv_usec );
-   printf("%lu\n",begin.tv_usec );
 	printf("Took %f seconds\n",end.tv_sec-begin.tv_sec+(end.tv_usec-begin.tv_usec)/1000000.0f);
 	printf("Writing...\n" );
 	FILE *f;
@@ -210,16 +197,6 @@ void *worker(void *number){
 			sem_wait(&thread_sem[*thread_number]);
 		}
 
-		/*if(a!=current_layer){
-		   while(a)
-		   running_count--;
-		   pthread_cond_signal(&cond_parent_go);
-		   printf("waiting... %d %d\n",current_layer,*thread_number );
-		   pthread_cond_wait(&cond_child_go,&mutex_child);
-		   printf("went... %d %d\n",current_layer,*thread_number );
-
-		   }*/
-
 		if(method==DIAMOND) {
 			float avg = 0;
 			avg+=points[x-squareside_length/2+(y-squareside_length/2)*side_length]/4;
@@ -257,7 +234,7 @@ void *worker(void *number){
 
 
 			}
-			points[x+side_length*y] = avg +  (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer);
+			points[x+side_length*y] = avg +  (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer);
 		}
 		//printf("hello %d %d %d %d\n",job_layer,y,x,*thread_number );
 		task_count[*thread_number]++;
