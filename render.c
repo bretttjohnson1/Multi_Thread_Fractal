@@ -11,8 +11,10 @@
 #include <stdlib.h>
 #include <errno.h>
 
+
 typedef struct color color;
 
+float PI= 3.1415f;
 float offx=0.0f;
 float offy=-.5f;
 float offz=-6.0f;
@@ -22,6 +24,7 @@ float thet=0;
 int window;
 int layers;
 float *points;
+
 int points_len;
 int side_length;
 color *color_array;
@@ -65,6 +68,19 @@ void moveandrotate(){
 	if(keys[(int)'k'])
 		phi-=1+2*keys[(int)'m'];
 
+	if(thet>=360) {
+		thet-=360;
+	}
+   if(thet<=360) {
+		thet+=360;
+	}
+	if(phi<=-360) {
+		phi+=360;
+	}
+   if(phi>=360) {
+		phi-=360;
+	}
+
 }
 
 void init(int width, int height){
@@ -92,7 +108,10 @@ void draw(){
 	//gettimeofday(&start, NULL);
 	glTranslatef(offx,offy,offz);
 	glScalef(.01,.01,.01);
-	glRotatef(thet,0,1,0);
+   //printf("%f\n",cos(thet/360) );
+   glRotatef(thet,0,1,0);
+	glRotatef(phi,cos(thet/360*6.283185f),0,sin(thet/360*6.283185f));
+
 
 
 	//gettimeofday(&begin, NULL);
@@ -138,15 +157,15 @@ char polygon_mode = 1;
 void keyPressed(unsigned char key, int x, int y){
 	keys[key]=1;
 	usleep(100);
-   if(key == 'p'){
-      if(polygon_mode == 0){
-         glPolygonMode(GL_FRONT_AND_BACK, GL_LINE );
-         polygon_mode = 1;
-      }else if(polygon_mode == 1){
-         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-         polygon_mode = 0;
-      }
-   }
+	if(key == 'p') {
+		if(polygon_mode == 0) {
+			glPolygonMode(GL_FRONT_AND_BACK, GL_LINE );
+			polygon_mode = 1;
+		}else if(polygon_mode == 1) {
+			glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+			polygon_mode = 0;
+		}
+	}
 	if(key == 27) {
 		glutDestroyWindow(window);
 		exit(0);
@@ -172,17 +191,44 @@ int main(int argc, char **argv){
 	int a =0;
 	while(getline(&p,&len,f)!=-1) {
 		sscanf(p, "%6f",points+a);
-		color_array[a].r = .3/(pow(1.03,-points[a]));
-		color_array[a].g = .6*sin(points[a]/(layers));
-		color_array[a].b = .3/(pow(.95,-points[a]));
 		a++;
 	}
-	//free(p);
 	fclose(f);
-	printf("hello\n");
 
-	int b = 1;
-	glutInit(&b,argv);
+   float red;
+   float green;
+   float blue;
+   char *rd = malloc(10);
+   char *gr = malloc(10);
+   char *bl = malloc(10);
+   FILE *red_file;
+   FILE *green_file;
+   FILE *blue_file;
+   red_file = fopen("red.dat","r");
+   green_file = fopen("green.dat","r");
+   blue_file = fopen("blue.dat","r");
+
+   a =0;
+	while(getline(&rd,&len,red_file)!=-1 && getline(&gr,&len,green_file)!=-1 && getline(&bl,&len,blue_file)!=-1) {
+		sscanf(rd, "%6f",&red);
+      sscanf(gr, "%6f",&green);
+      sscanf(bl, "%6f",&blue);
+      double mag = sqrt(red*red+blue*blue+green*green);
+      color_array[a].r = fabs(red)/mag;
+      color_array[a].g = fabs(green)/mag;
+      color_array[a].b = fabs(blue)/mag;
+
+		a++;
+	}
+   free(rd);
+   free(gr);
+   free(bl);
+   fclose(red_file);
+   fclose(green_file);
+   fclose(blue_file);
+
+	int var = 1;
+	glutInit(&var,argv);
 	glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE | GLUT_ALPHA | GLUT_DEPTH);
 	glutInitWindowSize(640,480);
 	offz = -1-side_length/100;
