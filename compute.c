@@ -37,7 +37,7 @@ int layers = 8;
 int current_layer = 0;
 uint64_t side_length; //side_length of one side of the grid
 
-float noise = .5; //multiplied to random value. more noise = more variation
+float noise = .1; //multiplied to random value. more noise = more variation
 
 sem_t *thread_sem;
 sem_t parent_sem;
@@ -89,9 +89,10 @@ int main(int argc,char **argsv){
    green_vals = malloc(sizeof(float)*side_length*side_length);
    blue_vals = malloc(sizeof(float)*side_length*side_length);
 
+   
 	points[0] = 0;
 	points[side_length-1] = 0;
-	points[side_length*(side_length-1)+1] = 2;
+	points[side_length*(side_length-1)] = 200;
 	points[side_length*side_length-1] = -5;
 
 	tasks_per_layer = malloc(sizeof(int)*layers);
@@ -223,6 +224,8 @@ void *worker(void *number){
 		job_layer = current_job.layer;
 		squareside_length = current_job.squareside_length;
 		//printf("%d\n",job_layer );
+      if(job_layer>current_layer)
+         sem_post(&parent_sem);
 		while(job_layer>current_layer) {
 			sem_wait(&thread_sem[*thread_number]);
 		}
@@ -252,13 +255,13 @@ void *worker(void *number){
 			blue_avg+=blue_vals[x-squareside_length/2+(y+squareside_length/2)*side_length]/4;
 			blue_avg+=blue_vals[x+squareside_length/2+(y+squareside_length/2)*side_length]/4;
 
-			points[x+y*side_length] = avg + (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer);
+			points[x+y*side_length] = avg + (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer)*(layers-job_layer);
 
-         red_vals[x+y*side_length] = red_avg + (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer);
+         red_vals[x+y*side_length] = red_avg + (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer)*(layers-job_layer);
 
-         blue_vals[x+y*side_length] = blue_avg + (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer);
+         blue_vals[x+y*side_length] = blue_avg + (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer)*(layers-job_layer);
 
-         green_vals[x+y*side_length] = green_avg + (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer);
+         green_vals[x+y*side_length] = green_avg + (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer)*(layers-job_layer);
 
 
 		}else if(SQUARE) {
@@ -357,19 +360,17 @@ void *worker(void *number){
 				blue_avg+=blue_vals[x+(y+squareside_length/2)*side_length]/4;
 
 			}
-			points[x+side_length*y] = avg +  (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer);
-         red_vals[x+side_length*y] = red_avg +  (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer);
-         green_vals[x+side_length*y] = green_avg +  (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer);
-         blue_vals[x+side_length*y] = blue_avg +  (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer);
+			points[x+side_length*y] = avg +  (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer)*(layers-job_layer);
+         red_vals[x+side_length*y] = red_avg +  (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer)*(layers-job_layer);
+         green_vals[x+side_length*y] = green_avg +  (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer)*(layers-job_layer);
+         blue_vals[x+side_length*y] = blue_avg +  (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer)*(layers-job_layer);
 
 		}
 		//printf("hello %d %d %d %d\n",job_layer,y,x,*thread_number );
 		task_count[*thread_number]++;
-      if(sum(task_count,num_threads)==tasks_per_layer[current_layer]){
-         sem_post(&parent_sem);
-      }
 
 	}
+   sem_post(&parent_sem);
 	pthread_exit(0);
 }
 void * smooth_worker(void * number){
@@ -380,8 +381,8 @@ void * smooth_worker(void * number){
 		int b = h%side_length;
 		float average = 0;
 		float count = 0;
-		for(int i = a-1; i<=a+1; i++) {
-			for(int j = b-1; j<=b+1; j++) {
+		for(int i = a-3; i<=a+3; i++) {
+			for(int j = b-3; j<=b+3; j++) {
 				if(i>=0 && j>=0 && i<side_length && j<side_length) {
 					average+=points[i+j*side_length];
 					count++;

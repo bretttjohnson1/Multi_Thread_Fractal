@@ -207,19 +207,38 @@ int main(int argc, char **argv){
    red_file = fopen("red.dat","r");
    green_file = fopen("green.dat","r");
    blue_file = fopen("blue.dat","r");
+   float rmin = 0,gmin=0,bmin=0;
+   float rmax = 0,gmax=0,bmax=0;
 
    a =0;
 	while(getline(&rd,&len,red_file)!=-1 && getline(&gr,&len,green_file)!=-1 && getline(&bl,&len,blue_file)!=-1) {
 		sscanf(rd, "%6f",&red);
       sscanf(gr, "%6f",&green);
       sscanf(bl, "%6f",&blue);
-      double mag = sqrt(red*red+blue*blue+green*green);
-      color_array[a].r = fabs(red)/mag;
-      color_array[a].g = fabs(green)/mag;
-      color_array[a].b = fabs(blue)/mag;
+      if(red>rmax)rmax=red;
+      if(red<rmin)rmin=red;
+      if(green>gmax)gmax=green;
+      if(green<gmin)gmin=green;
+      if(blue>bmax)bmax=blue;
+      if(blue<bmin)bmin=blue;
+
+      color_array[a].r = red;
+      color_array[a].g =  green;
+      color_array[a].b =  blue;
 
 		a++;
 	}
+   for(int a =0;a<points_len;a++){
+      color_array[a].r +=fabs(rmin);
+      color_array[a].r /=(rmax-rmin);
+
+      color_array[a].g +=fabs(gmin);
+      color_array[a].g /=(gmax-gmin);
+
+      color_array[a].b +=fabs(bmin);
+      color_array[a].b /=(bmax-bmin);
+      //printf("%f\n", color_array[a].b);
+   }
    free(rd);
    free(gr);
    free(bl);
