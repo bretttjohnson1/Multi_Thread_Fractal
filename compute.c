@@ -39,6 +39,8 @@ uint64_t side_length; //side_length of one side of the grid
 
 float noise = .1; //multiplied to random value. more noise = more variation
 
+char smoothing = 1;
+
 sem_t *thread_sem;
 sem_t parent_sem;
 
@@ -85,17 +87,17 @@ int main(int argc,char **argsv){
 
 	}
 	points = malloc(sizeof(float)*side_length*side_length);
-   red_vals = malloc(sizeof(float)*side_length*side_length);
-   green_vals = malloc(sizeof(float)*side_length*side_length);
-   blue_vals = malloc(sizeof(float)*side_length*side_length);
+	red_vals = malloc(sizeof(float)*side_length*side_length);
+	green_vals = malloc(sizeof(float)*side_length*side_length);
+	blue_vals = malloc(sizeof(float)*side_length*side_length);
 
-   
+
 	points[0] = 0;
 	points[side_length-1] = 0;
-	points[side_length*(side_length-1)] = 200;
-	points[side_length*side_length-1] = -5;
+	points[side_length*(side_length-1)] = 0;
+	points[side_length*side_length-1] = 0;
 
-	tasks_per_layer = malloc(sizeof(int)*layers);
+	tasks_per_layer = malloc(sizeof(int)*layers*2);
 	sem_init(&task_count_mutex,0,1);
 	//printf("made it\n");
 	int index = 0;
@@ -113,6 +115,8 @@ int main(int argc,char **argsv){
 				layer_index++;
 			}
 		}
+		tasks_per_layer[a*2] = layer_index;
+		layer_index = 0;
 		int row = 0;
 		for(int b  = 0; b<side_length; b+=squareside_length/2) {
 			for(int c =squareside_length/2*(row%2==0); c<side_length; c+=squareside_length) {
@@ -126,14 +130,14 @@ int main(int argc,char **argsv){
 			}
 			row++;
 		}
-		tasks_per_layer[a] = layer_index;
+		tasks_per_layer[a*2+1] = layer_index;
 	}
-   sem_init(&parent_sem,0,0);
+	sem_init(&parent_sem,0,0);
 	thread_sem  = malloc(sizeof(sem_t)*(num_threads));
 	for(int a = 0; a<num_threads-1; a++)
 		sem_init(&thread_sem[a],0,0);
 
-   task_count = malloc(sizeof(int)*num_threads);
+	task_count = malloc(sizeof(int)*num_threads);
 
 	pthread_t tids[num_threads];
 	pthread_attr_t attrs[num_threads];
@@ -144,37 +148,51 @@ int main(int argc,char **argsv){
 		tnumber[i] = i;
 		pthread_create(&tids[i],&attrs[i],worker,&tnumber[i]);
 	}
-	for(int a =0; a<layers; a++) {
+	for(int a =0; a<layers*2; a++) {
 		current_layer = a;
 
 		for(int b = 0; b<num_threads; b++)
 			sem_post(thread_sem+b);
+		while(sum(task_count,num_threads)<tasks_per_layer[a]) {
+			sem_wait(&parent_sem);
+		}
 
-		while(sum(task_count,num_threads)<tasks_per_layer[a]){
-         sem_wait(&parent_sem);
-      }
+		for(int b = 0; b<num_threads; b++)
+			task_count[b]=0;
 
-      for(int b = 0;b<num_threads;b++)
-		    task_count[b]=0;
-		printf("Layer %d done\n",a+1);
+		if(a%2) printf("Layer %d done\n",(a/2)+1);
 		fflush(stdout);
 	}
 	for(int a =0; a<num_threads; a++) {
 		pthread_join(tids[a],NULL);
 	}
-	printf("Smoothing...\n");
-	smoothed_points = malloc(sizeof(float)*side_length*side_length);
-	for (int i = 0; i < num_threads; i++) {
-		pthread_attr_init(&attrs[i]);
-		pthread_create(&tids[i],&attrs[i],smooth_worker,&tnumber[i]);
+	struct timeval sbegin,send;
+	gettimeofday(&sbegin,NULL);
+
+	if(smoothing) {
+		printf("Smoothing...\n");
+		smoothed_points = malloc(sizeof(float)*side_length*side_length);
+
+
+		for (int i = 0; i < num_threads; i++) {
+			pthread_attr_init(&attrs[i]);
+			pthread_create(&tids[i],&attrs[i],smooth_worker,&tnumber[i]);
+		}
+
+		for(int a =0; a<num_threads; a++) {
+			pthread_join(tids[a],NULL);
+		}
+		free(points);
+	}else{
+		smoothed_points = points;
 	}
-	for(int a =0; a<num_threads; a++) {
-		pthread_join(tids[a],NULL);
-	}
-	free(points);
+   gettimeofday(&send,NULL);
+
+	printf("Smoothing took %f seconds\n",send.tv_sec-sbegin.tv_sec+(send.tv_usec-sbegin.tv_usec)/1000000.0f);
+
 
 	gettimeofday(&end,NULL);
-	printf("Took %f seconds\n",end.tv_sec-begin.tv_sec+(end.tv_usec-begin.tv_usec)/1000000.0f);
+	printf("Total took %f seconds\n",end.tv_sec-begin.tv_sec+(end.tv_usec-begin.tv_usec)/1000000.0f);
 	printf("Writing...\n" );
 	FILE *f;
 	f = fopen("output.dat","wb");
@@ -182,24 +200,24 @@ int main(int argc,char **argsv){
 	for(int a =0; a<side_length*side_length; a++) {
 		fprintf(f, "%f\n",smoothed_points[a]);
 	}
-   fclose(f);
+	fclose(f);
 	f = fopen("red.dat","wb");
 	for(int a =0; a<side_length*side_length; a++) {
 		fprintf(f, "%f\n",red_vals[a]);
 	}
-   fclose(f);
+	fclose(f);
 	f = fopen("green.dat","wb");
 	for(int a =0; a<side_length*side_length; a++) {
 		fprintf(f, "%f\n",green_vals[a]);
 	}
-   fclose(f);
+	fclose(f);
 	f = fopen("blue.dat","wb");
 	for(int a =0; a<side_length*side_length; a++) {
 		fprintf(f, "%f\n",blue_vals[a]);
 	}
-   fclose(f);
+	fclose(f);
 
-   free(thread_sem);
+	free(thread_sem);
 	sem_destroy(&task_count_mutex);
 	free(job_que);
 	free(smoothed_points);
@@ -223,67 +241,66 @@ void *worker(void *number){
 		method = current_job.method;
 		job_layer = current_job.layer;
 		squareside_length = current_job.squareside_length;
-		//printf("%d\n",job_layer );
-      if(job_layer>current_layer)
-         sem_post(&parent_sem);
-		while(job_layer>current_layer) {
+		if(2*job_layer+method>current_layer)
+			sem_post(&parent_sem);
+		while(2*job_layer+method>current_layer) {
 			sem_wait(&thread_sem[*thread_number]);
 		}
 
 		if(method==DIAMOND) {
 			float avg = 0;
-         float red_avg = 0;
-         float green_avg = 0;
-         float blue_avg = 0;
+			float red_avg = 0;
+			float green_avg = 0;
+			float blue_avg = 0;
 			avg+=points[x-squareside_length/2+(y-squareside_length/2)*side_length]/4;
 			avg+=points[x+squareside_length/2+(y-squareside_length/2)*side_length]/4;
 			avg+=points[x-squareside_length/2+(y+squareside_length/2)*side_length]/4;
 			avg+=points[x+squareside_length/2+(y+squareside_length/2)*side_length]/4;
 
-         red_avg+=red_vals[x-squareside_length/2+(y-squareside_length/2)*side_length]/4;
-         red_avg+=red_vals[x+squareside_length/2+(y-squareside_length/2)*side_length]/4;
-         red_avg+=red_vals[x-squareside_length/2+(y+squareside_length/2)*side_length]/4;
-         red_avg+=red_vals[x+squareside_length/2+(y+squareside_length/2)*side_length]/4;
+			red_avg+=red_vals[x-squareside_length/2+(y-squareside_length/2)*side_length]/4;
+			red_avg+=red_vals[x+squareside_length/2+(y-squareside_length/2)*side_length]/4;
+			red_avg+=red_vals[x-squareside_length/2+(y+squareside_length/2)*side_length]/4;
+			red_avg+=red_vals[x+squareside_length/2+(y+squareside_length/2)*side_length]/4;
 
-         green_avg+=green_vals[x-squareside_length/2+(y-squareside_length/2)*side_length]/4;
+			green_avg+=green_vals[x-squareside_length/2+(y-squareside_length/2)*side_length]/4;
 			green_avg+=green_vals[x+squareside_length/2+(y-squareside_length/2)*side_length]/4;
 			green_avg+=green_vals[x-squareside_length/2+(y+squareside_length/2)*side_length]/4;
 			green_avg+=green_vals[x+squareside_length/2+(y+squareside_length/2)*side_length]/4;
 
-         blue_avg+=blue_vals[x-squareside_length/2+(y-squareside_length/2)*side_length]/4;
+			blue_avg+=blue_vals[x-squareside_length/2+(y-squareside_length/2)*side_length]/4;
 			blue_avg+=blue_vals[x+squareside_length/2+(y-squareside_length/2)*side_length]/4;
 			blue_avg+=blue_vals[x-squareside_length/2+(y+squareside_length/2)*side_length]/4;
 			blue_avg+=blue_vals[x+squareside_length/2+(y+squareside_length/2)*side_length]/4;
 
 			points[x+y*side_length] = avg + (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer)*(layers-job_layer);
 
-         red_vals[x+y*side_length] = red_avg + (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer)*(layers-job_layer);
+			red_vals[x+y*side_length] = red_avg + (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer)*(layers-job_layer);
 
-         blue_vals[x+y*side_length] = blue_avg + (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer)*(layers-job_layer);
+			blue_vals[x+y*side_length] = blue_avg + (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer)*(layers-job_layer);
 
-         green_vals[x+y*side_length] = green_avg + (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer)*(layers-job_layer);
+			green_vals[x+y*side_length] = green_avg + (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer)*(layers-job_layer);
 
 
 		}else if(SQUARE) {
-         float avg = 0;
-         float red_avg = 0;
-         float green_avg = 0;
-         float blue_avg = 0;
+			float avg = 0;
+			float red_avg = 0;
+			float green_avg = 0;
+			float blue_avg = 0;
 			if(x == 0) {
 				//printf("%d %d %d %d\n",x,y, squareside_length/2, side_length );
 				avg+=points[x+squareside_length/2+y*side_length]/3;
 				avg+=points[x+(y-squareside_length/2)*side_length]/3;
 				avg+=points[x+(y+squareside_length/2)*side_length]/3;
 
-            red_avg+=red_vals[x+squareside_length/2+y*side_length]/3;
-            red_avg+=red_vals[x+(y-squareside_length/2)*side_length]/3;
-            red_avg+=red_vals[x+(y+squareside_length/2)*side_length]/3;
+				red_avg+=red_vals[x+squareside_length/2+y*side_length]/3;
+				red_avg+=red_vals[x+(y-squareside_length/2)*side_length]/3;
+				red_avg+=red_vals[x+(y+squareside_length/2)*side_length]/3;
 
-            green_avg+=green_vals[x+squareside_length/2+y*side_length]/3;
+				green_avg+=green_vals[x+squareside_length/2+y*side_length]/3;
 				green_avg+=green_vals[x+(y-squareside_length/2)*side_length]/3;
 				green_avg+=green_vals[x+(y+squareside_length/2)*side_length]/3;
 
-            blue_avg+=blue_vals[x+squareside_length/2+y*side_length]/3;
+				blue_avg+=blue_vals[x+squareside_length/2+y*side_length]/3;
 				blue_avg+=blue_vals[x+(y-squareside_length/2)*side_length]/3;
 				blue_avg+=blue_vals[x+(y+squareside_length/2)*side_length]/3;
 
@@ -292,15 +309,15 @@ void *worker(void *number){
 				avg+=points[x-squareside_length/2+y*side_length]/3;
 				avg+=points[x+(y+squareside_length/2)*side_length]/3;
 
-            red_avg+=red_vals[x+squareside_length/2+y*side_length]/3;
+				red_avg+=red_vals[x+squareside_length/2+y*side_length]/3;
 				red_avg+=red_vals[x-squareside_length/2+y*side_length]/3;
 				red_avg+=red_vals[x+(y+squareside_length/2)*side_length]/3;
 
-            green_avg+=green_vals[x+squareside_length/2+y*side_length]/3;
+				green_avg+=green_vals[x+squareside_length/2+y*side_length]/3;
 				green_avg+=green_vals[x-squareside_length/2+y*side_length]/3;
 				green_avg+=green_vals[x+(y+squareside_length/2)*side_length]/3;
 
-            blue_avg+=blue_vals[x+squareside_length/2+y*side_length]/3;
+				blue_avg+=blue_vals[x+squareside_length/2+y*side_length]/3;
 				blue_avg+=blue_vals[x-squareside_length/2+y*side_length]/3;
 				blue_avg+=blue_vals[x+(y+squareside_length/2)*side_length]/3;
 
@@ -309,15 +326,15 @@ void *worker(void *number){
 				avg+=points[x+(y-squareside_length/2)*side_length]/3;
 				avg+=points[x+(y+squareside_length/2)*side_length]/3;
 
-            red_avg+=red_vals[x-squareside_length/2+y*side_length]/3;
+				red_avg+=red_vals[x-squareside_length/2+y*side_length]/3;
 				red_avg+=red_vals[x+(y-squareside_length/2)*side_length]/3;
 				red_avg+=red_vals[x+(y+squareside_length/2)*side_length]/3;
 
-            green_avg+=green_vals[x-squareside_length/2+y*side_length]/3;
+				green_avg+=green_vals[x-squareside_length/2+y*side_length]/3;
 				green_avg+=green_vals[x+(y-squareside_length/2)*side_length]/3;
 				green_avg+=green_vals[x+(y+squareside_length/2)*side_length]/3;
 
-            blue_avg+=blue_vals[x-squareside_length/2+y*side_length]/3;
+				blue_avg+=blue_vals[x-squareside_length/2+y*side_length]/3;
 				blue_avg+=blue_vals[x+(y-squareside_length/2)*side_length]/3;
 				blue_avg+=blue_vals[x+(y+squareside_length/2)*side_length]/3;
 
@@ -326,15 +343,15 @@ void *worker(void *number){
 				avg+=points[x-squareside_length/2+y*side_length]/3;
 				avg+=points[x+(y-squareside_length/2)*side_length]/3;
 
-            red_avg+=red_vals[x+squareside_length/2+y*side_length]/3;
-            red_avg+=red_vals[x-squareside_length/2+y*side_length]/3;
-            red_avg+=red_vals[x+(y-squareside_length/2)*side_length]/3;
+				red_avg+=red_vals[x+squareside_length/2+y*side_length]/3;
+				red_avg+=red_vals[x-squareside_length/2+y*side_length]/3;
+				red_avg+=red_vals[x+(y-squareside_length/2)*side_length]/3;
 
-            green_avg+=green_vals[x+squareside_length/2+y*side_length]/3;
+				green_avg+=green_vals[x+squareside_length/2+y*side_length]/3;
 				green_avg+=green_vals[x-squareside_length/2+y*side_length]/3;
 				green_avg+=green_vals[x+(y-squareside_length/2)*side_length]/3;
 
-            blue_avg+=blue_vals[x+squareside_length/2+y*side_length]/3;
+				blue_avg+=blue_vals[x+squareside_length/2+y*side_length]/3;
 				blue_avg+=blue_vals[x-squareside_length/2+y*side_length]/3;
 				blue_avg+=blue_vals[x+(y-squareside_length/2)*side_length]/3;
 
@@ -344,60 +361,61 @@ void *worker(void *number){
 				avg+=points[x+(y-squareside_length/2)*side_length]/4;
 				avg+=points[x+(y+squareside_length/2)*side_length]/4;
 
-            red_avg+=red_vals[x+squareside_length/2+y*side_length]/4;
-            red_avg+=red_vals[x-squareside_length/2+y*side_length]/4;
-            red_avg+=red_vals[x+(y-squareside_length/2)*side_length]/4;
-            red_avg+=red_vals[x+(y+squareside_length/2)*side_length]/4;
+				red_avg+=red_vals[x+squareside_length/2+y*side_length]/4;
+				red_avg+=red_vals[x-squareside_length/2+y*side_length]/4;
+				red_avg+=red_vals[x+(y-squareside_length/2)*side_length]/4;
+				red_avg+=red_vals[x+(y+squareside_length/2)*side_length]/4;
 
-            green_avg+=green_vals[x+squareside_length/2+y*side_length]/4;
+				green_avg+=green_vals[x+squareside_length/2+y*side_length]/4;
 				green_avg+=green_vals[x-squareside_length/2+y*side_length]/4;
 				green_avg+=green_vals[x+(y-squareside_length/2)*side_length]/4;
 				green_avg+=green_vals[x+(y+squareside_length/2)*side_length]/4;
 
-            blue_avg+=blue_vals[x+squareside_length/2+y*side_length]/4;
+				blue_avg+=blue_vals[x+squareside_length/2+y*side_length]/4;
 				blue_avg+=blue_vals[x-squareside_length/2+y*side_length]/4;
 				blue_avg+=blue_vals[x+(y-squareside_length/2)*side_length]/4;
 				blue_avg+=blue_vals[x+(y+squareside_length/2)*side_length]/4;
 
 			}
 			points[x+side_length*y] = avg +  (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer)*(layers-job_layer);
-         red_vals[x+side_length*y] = red_avg +  (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer)*(layers-job_layer);
-         green_vals[x+side_length*y] = green_avg +  (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer)*(layers-job_layer);
-         blue_vals[x+side_length*y] = blue_avg +  (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer)*(layers-job_layer);
+			red_vals[x+side_length*y] = red_avg +  (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer)*(layers-job_layer);
+			green_vals[x+side_length*y] = green_avg +  (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer)*(layers-job_layer);
+			blue_vals[x+side_length*y] = blue_avg +  (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer)*(layers-job_layer);
 
 		}
-		//printf("hello %d %d %d %d\n",job_layer,y,x,*thread_number );
 		task_count[*thread_number]++;
 
 	}
-   sem_post(&parent_sem);
+	sem_post(&parent_sem);
 	pthread_exit(0);
 }
 void * smooth_worker(void * number){
 	int *thread_number;
 	thread_number = number;
-	for(int h = *thread_number; h<(side_length)*(side_length); h+=num_threads) {
-		int a = h/side_length;
-		int b = h%side_length;
-		float average = 0;
-		float count = 0;
-		for(int i = a-3; i<=a+3; i++) {
-			for(int j = b-3; j<=b+3; j++) {
-				if(i>=0 && j>=0 && i<side_length && j<side_length) {
-					average+=points[i+j*side_length];
-					count++;
+   int len =(side_length)*(side_length);
+	if(smoothing) {
+		for(int h = (*thread_number)/num_threads*len; h<len/num_threads; h++) {
+			int a = h/side_length;
+			int b = h%side_length;
+			float average = 0;
+			float count = 0;
+			for(int i = a-3; i<=a+3; i++) {
+				for(int j = b-3; j<=b+3; j++) {
+					if(i>=0 && j>=0 && i<side_length && j<side_length) {
+						average+=points[i+j*side_length];
+						count++;
+					}
 				}
+				smoothed_points[h] = average/count;
 			}
-			smoothed_points[h] = average/count;
 		}
 	}
-
 
 	pthread_exit(0);
 }
 int sum(int *list,int len){
-   int tot = 0;
-   for(int a =0;a<len;a++)
-      tot+=list[a];
-   return tot;
+	int tot = 0;
+	for(int a =0; a<len; a++)
+		tot+=list[a];
+	return tot;
 }
