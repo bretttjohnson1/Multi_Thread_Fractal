@@ -132,7 +132,6 @@ int main(int argc,char **argsv){
 		tasks_per_layer[a*2+1] = layer_index;
 	}
 
-
 	sem_init(&parent_sem,0,0);
 	thread_sem  = malloc(sizeof(sem_t)*(num_threads));
 	for(int a = 0; a<num_threads-1; a++)
@@ -226,7 +225,9 @@ int main(int argc,char **argsv){
 }
 
 void *worker(void *number){
-   unsigned int seed = time(NULL);
+   struct timeval time_seed;
+   gettimeofday(&time_seed,NULL);
+   unsigned int seed = time_seed.tv_usec;
    int *thread_number;
    thread_number = number;
 	job current_job;
@@ -235,7 +236,7 @@ void *worker(void *number){
 	int y;
 	char method;
 	int squareside_length;
-   for(int a =(*thread_number); a<job_que_length; a+=num_threads) {
+   for(int a =*thread_number; a<job_que_length; a+=num_threads) {
 		current_job = job_que[a];
 		x = current_job.x;
 		y = current_job.y;
