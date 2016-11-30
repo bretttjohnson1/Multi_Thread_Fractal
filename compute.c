@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
@@ -5,6 +6,8 @@
 #include <stdint.h>
 #include <semaphore.h>
 #include <sys/time.h>
+#include <utmpx.h>
+#include <unistd.h>
 #define DIAMOND 0
 #define SQUARE 1
 
@@ -44,6 +47,7 @@ char smoothing = 1;
 sem_t *thread_sem;
 sem_t parent_sem;
 
+
 int sum(int *list,int num_threads);
 void *smooth_worker(void *number);
 void *worker(void* number);
@@ -72,12 +76,7 @@ int main(int argc,char **argsv){
 	}
 	struct timeval begin,end;
 	gettimeofday(&begin, NULL);
-	srand(time(NULL));
 
-	/*pthread_mutex_init(&mutex_parent,NULL); //TODO check if returns -1 and print perror if so
-	   pthread_cond_init(&cond_parent_go,NULL);
-	   pthread_mutex_init(&mutex_child,NULL);
-	   pthread_cond_init(&cond_child_go,NULL);*/
 	side_length  = pow(2,layers)+1;
 	job_que_length = side_length*side_length-4;
 	job_que = malloc(sizeof(job)*(job_que_length));
@@ -132,6 +131,8 @@ int main(int argc,char **argsv){
 		}
 		tasks_per_layer[a*2+1] = layer_index;
 	}
+
+
 	sem_init(&parent_sem,0,0);
 	thread_sem  = malloc(sizeof(sem_t)*(num_threads));
 	for(int a = 0; a<num_threads-1; a++)
@@ -150,7 +151,6 @@ int main(int argc,char **argsv){
 	}
 	for(int a =0; a<layers*2; a++) {
 		current_layer = a;
-
 		for(int b = 0; b<num_threads; b++)
 			sem_post(thread_sem+b);
 		while(sum(task_count,num_threads)<tasks_per_layer[a]) {
@@ -186,7 +186,7 @@ int main(int argc,char **argsv){
 	}else{
 		smoothed_points = points;
 	}
-   gettimeofday(&send,NULL);
+	gettimeofday(&send,NULL);
 
 	printf("Smoothing took %f seconds\n",send.tv_sec-sbegin.tv_sec+(send.tv_usec-sbegin.tv_usec)/1000000.0f);
 
@@ -222,30 +222,34 @@ int main(int argc,char **argsv){
 	free(job_que);
 	free(smoothed_points);
 	free(tasks_per_layer);
+   return 0;
 }
 
 void *worker(void *number){
-	int *thread_number;
-	thread_number = number;
-	//printf("%d\n",*thread_number);
+   unsigned int seed = time(NULL);
+   int *thread_number;
+   thread_number = number;
 	job current_job;
 	int job_layer;
 	int x;
 	int y;
 	char method;
 	int squareside_length;
-	for(int a =*thread_number; a<job_que_length; a+=num_threads) {
+   for(int a =(*thread_number); a<job_que_length; a+=num_threads) {
 		current_job = job_que[a];
 		x = current_job.x;
 		y = current_job.y;
 		method = current_job.method;
 		job_layer = current_job.layer;
 		squareside_length = current_job.squareside_length;
+
 		if(2*job_layer+method>current_layer)
 			sem_post(&parent_sem);
 		while(2*job_layer+method>current_layer) {
+         //printf("CORE: %d TID: %d \n", sched_getcpu(), *thread_number);
 			sem_wait(&thread_sem[*thread_number]);
 		}
+
 
 		if(method==DIAMOND) {
 			float avg = 0;
@@ -272,13 +276,13 @@ void *worker(void *number){
 			blue_avg+=blue_vals[x-squareside_length/2+(y+squareside_length/2)*side_length]/4;
 			blue_avg+=blue_vals[x+squareside_length/2+(y+squareside_length/2)*side_length]/4;
 
-			points[x+y*side_length] = avg + (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer)*(layers-job_layer);
+			points[x+y*side_length] = avg + (double)((rand_r(&seed)-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer)*(layers-job_layer);
 
-			red_vals[x+y*side_length] = red_avg + (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer)*(layers-job_layer);
+			red_vals[x+y*side_length] = red_avg + (double)((rand_r(&seed)-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer)*(layers-job_layer);
 
-			blue_vals[x+y*side_length] = blue_avg + (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer)*(layers-job_layer);
+			blue_vals[x+y*side_length] = blue_avg + (double)((rand_r(&seed)-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer)*(layers-job_layer);
 
-			green_vals[x+y*side_length] = green_avg + (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer)*(layers-job_layer);
+			green_vals[x+y*side_length] = green_avg + (double)((rand_r(&seed)-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer)*(layers-job_layer);
 
 
 		}else if(SQUARE) {
@@ -377,10 +381,10 @@ void *worker(void *number){
 				blue_avg+=blue_vals[x+(y+squareside_length/2)*side_length]/4;
 
 			}
-			points[x+side_length*y] = avg +  (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer)*(layers-job_layer);
-			red_vals[x+side_length*y] = red_avg +  (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer)*(layers-job_layer);
-			green_vals[x+side_length*y] = green_avg +  (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer)*(layers-job_layer);
-			blue_vals[x+side_length*y] = blue_avg +  (double)((rand()-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer)*(layers-job_layer);
+			points[x+side_length*y] = avg +  (double)((rand_r(&seed)-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer)*(layers-job_layer);
+			red_vals[x+side_length*y] = red_avg +  (double)((rand_r(&seed)-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer)*(layers-job_layer);
+			green_vals[x+side_length*y] = green_avg +  (double)((rand_r(&seed)-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer)*(layers-job_layer);
+			blue_vals[x+side_length*y] = blue_avg +  (double)((rand_r(&seed)-RAND_MAX/2)/(float)RAND_MAX)*2*noise*(layers-job_layer)*(layers-job_layer)*(layers-job_layer);
 
 		}
 		task_count[*thread_number]++;
@@ -392,9 +396,9 @@ void *worker(void *number){
 void * smooth_worker(void * number){
 	int *thread_number;
 	thread_number = number;
-   int len =(side_length)*(side_length);
+	int len =(side_length)*(side_length);
 	if(smoothing) {
-		for(int h = (*thread_number)/num_threads*len; h<len/num_threads; h++) {
+		for(int h = (*thread_number); h<len; h+=num_threads) {
 			int a = h/side_length;
 			int b = h%side_length;
 			float average = 0;
