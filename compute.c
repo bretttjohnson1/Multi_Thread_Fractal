@@ -53,7 +53,15 @@ int sum(int *list,int num_threads);
 void *smooth_worker(void *number);
 void *worker(void* number);
 int main(int argc,char **argsv){
-
+   if(argc==5){
+      const char *thread_num_str = argsv[1];
+		num_threads = atoi(thread_num_str);
+		const char *layers_str = argsv[2];
+		layers = atoi(layers_str);
+		const char *noise_str = argsv[3];
+		sscanf(noise_str,"%f",&noise);
+      datamode = atoi(argsv[4]);
+   }
 	if(argc==4) {
 		const char *thread_num_str = argsv[1];
 		num_threads = atoi(thread_num_str);
@@ -72,7 +80,8 @@ int main(int argc,char **argsv){
 	}else{
 		printf("Usage ./compute.o number_of_threads OR\n");
 		printf("Usage ./compute.o number_of_threads layers OR\n");
-		printf("Usage ./compute.o number_of_threads layers noise\n");
+		printf("Usage ./compute.o number_of_threads layers noise OR\n");
+      printf("Usage ./compute.o number_of_threads layers noise datamode(bool)\n");
 		exit(1);
 	}
 	struct timeval begin,end;
@@ -82,7 +91,7 @@ int main(int argc,char **argsv){
 	job_que_length = side_length*side_length-4;
 	job_que = malloc(sizeof(job)*(job_que_length));
 	if(job_que == NULL) {
-		printf("Not enough memory\n");
+		printf("Malloc err\n");
 		exit(1);
 
 	}
