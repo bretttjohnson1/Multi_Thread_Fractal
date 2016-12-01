@@ -47,6 +47,7 @@ char smoothing = 1;
 sem_t *thread_sem;
 sem_t parent_sem;
 
+char datamode = 1;
 
 int sum(int *list,int num_threads);
 void *smooth_worker(void *number);
@@ -55,19 +56,19 @@ int main(int argc,char **argsv){
 
 	if(argc==4) {
 		const char *thread_num_str = argsv[1];
-		num_threads = atoi(thread_num_str)-1;
+		num_threads = atoi(thread_num_str);
 		const char *layers_str = argsv[2];
 		layers = atoi(layers_str);
 		const char *noise_str = argsv[3];
 		sscanf(noise_str,"%f",&noise);
 	}else if(argc==3) {
 		const char *thread_num_str = argsv[1];
-		num_threads = atoi(thread_num_str)-1;
+		num_threads = atoi(thread_num_str);
 		const char *layers_str = argsv[2];
 		layers = atoi(layers_str);
 	}else if(argc==2) {
 		const char *thread_num_str = argsv[1];
-		num_threads = atoi(thread_num_str)-1;
+		num_threads = atoi(thread_num_str);
 	}else{
 		printf("Usage ./compute.o number_of_threads OR\n");
 		printf("Usage ./compute.o number_of_threads layers OR\n");
@@ -98,7 +99,6 @@ int main(int argc,char **argsv){
 
 	tasks_per_layer = malloc(sizeof(int)*layers*2);
 	sem_init(&task_count_mutex,0,1);
-	//printf("made it\n");
 	int index = 0;
 	for(int a =0; a<layers; a++) {
 		int layer_index = 0;
@@ -142,7 +142,7 @@ int main(int argc,char **argsv){
 	pthread_t tids[num_threads];
 	pthread_attr_t attrs[num_threads];
 	int tnumber[num_threads];
-	printf("Computing Fractals...\n");
+	if(!datamode) printf("Computing Fractals...\n");
 	for (int i = 0; i < num_threads; i++) {
 		pthread_attr_init(&attrs[i]);
 		tnumber[i] = i;
@@ -159,7 +159,7 @@ int main(int argc,char **argsv){
 		for(int b = 0; b<num_threads; b++)
 			task_count[b]=0;
 
-		if(a%2) printf("Layer %d done\n",(a/2)+1);
+		if(!datamode) if(a%2) printf("Layer %d done\n",(a/2)+1);
 		fflush(stdout);
 	}
 	for(int a =0; a<num_threads; a++) {
@@ -169,7 +169,7 @@ int main(int argc,char **argsv){
 	gettimeofday(&sbegin,NULL);
 
 	if(smoothing) {
-		printf("Smoothing...\n");
+		if(!datamode) printf("Smoothing...\n");
 		smoothed_points = malloc(sizeof(float)*side_length*side_length);
 
 
@@ -187,56 +187,66 @@ int main(int argc,char **argsv){
 	}
 	gettimeofday(&send,NULL);
 
-	printf("Smoothing took %f seconds\n",send.tv_sec-sbegin.tv_sec+(send.tv_usec-sbegin.tv_usec)/1000000.0f);
+	if(!datamode) printf("Smoothing took %f seconds\n",send.tv_sec-sbegin.tv_sec+(send.tv_usec-sbegin.tv_usec)/1000000.0f);
 
 
 	gettimeofday(&end,NULL);
-	printf("Total took %f seconds\n",end.tv_sec-begin.tv_sec+(end.tv_usec-begin.tv_usec)/1000000.0f);
-	printf("Writing...\n" );
-	FILE *f;
-	f = fopen("output.dat","wb");
-	fprintf(f, "%d\n",layers);
-	for(int a =0; a<side_length*side_length; a++) {
-		fprintf(f, "%f\n",smoothed_points[a]);
+	if(!datamode) printf("Total took %f seconds\n",end.tv_sec-begin.tv_sec+(end.tv_usec-begin.tv_usec)/1000000.0f);
+	if(datamode) printf("%f\n",end.tv_sec-begin.tv_sec+(end.tv_usec-begin.tv_usec)/1000000.0f);
+
+	if(!datamode) printf("Writing...\n" );
+	if(!datamode) {
+		FILE *f;
+		f = fopen("output.dat","wb");
+		fprintf(f, "%d\n",layers);
+		for(int a =0; a<side_length*side_length; a++) {
+			fprintf(f, "%f\n",smoothed_points[a]);
+		}
+		fclose(f);
+		f = fopen("red.dat","wb");
+		for(int a =0; a<side_length*side_length; a++) {
+			fprintf(f, "%f\n",red_vals[a]);
+		}
+		fclose(f);
+		f = fopen("green.dat","wb");
+		for(int a =0; a<side_length*side_length; a++) {
+			fprintf(f, "%f\n",green_vals[a]);
+		}
+		fclose(f);
+		f = fopen("blue.dat","wb");
+		for(int a =0; a<side_length*side_length; a++) {
+			fprintf(f, "%f\n",blue_vals[a]);
+		}
+		fclose(f);
 	}
-	fclose(f);
-	f = fopen("red.dat","wb");
-	for(int a =0; a<side_length*side_length; a++) {
-		fprintf(f, "%f\n",red_vals[a]);
-	}
-	fclose(f);
-	f = fopen("green.dat","wb");
-	for(int a =0; a<side_length*side_length; a++) {
-		fprintf(f, "%f\n",green_vals[a]);
-	}
-	fclose(f);
-	f = fopen("blue.dat","wb");
-	for(int a =0; a<side_length*side_length; a++) {
-		fprintf(f, "%f\n",blue_vals[a]);
-	}
-	fclose(f);
+
+	free(red_vals);
+
+	free(green_vals);
+	free(blue_vals);
+	free(task_count);
 
 	free(thread_sem);
 	sem_destroy(&task_count_mutex);
 	free(job_que);
 	free(smoothed_points);
 	free(tasks_per_layer);
-   return 0;
+	return 0;
 }
 
 void *worker(void *number){
-   struct timeval time_seed;
-   gettimeofday(&time_seed,NULL);
-   unsigned int seed = time_seed.tv_usec;
-   int *thread_number;
-   thread_number = number;
+	struct timeval time_seed;
+	gettimeofday(&time_seed,NULL);
+	unsigned int seed = time_seed.tv_usec;
+	int *thread_number;
+	thread_number = number;
 	job current_job;
 	int job_layer;
 	int x;
 	int y;
 	char method;
 	int squareside_length;
-   for(int a =*thread_number; a<job_que_length; a+=num_threads) {
+	for(int a =*thread_number; a<job_que_length; a+=num_threads) {
 		current_job = job_que[a];
 		x = current_job.x;
 		y = current_job.y;
@@ -247,7 +257,7 @@ void *worker(void *number){
 		if(2*job_layer+method>current_layer)
 			sem_post(&parent_sem);
 		while(2*job_layer+method>current_layer) {
-         //printf("CORE: %d TID: %d \n", sched_getcpu(), *thread_number);
+			//printf("CORE: %d TID: %d \n", sched_getcpu(), *thread_number);
 			sem_wait(&thread_sem[*thread_number]);
 		}
 
@@ -292,7 +302,6 @@ void *worker(void *number){
 			float green_avg = 0;
 			float blue_avg = 0;
 			if(x == 0) {
-				//printf("%d %d %d %d\n",x,y, squareside_length/2, side_length );
 				avg+=points[x+squareside_length/2+y*side_length]/3;
 				avg+=points[x+(y-squareside_length/2)*side_length]/3;
 				avg+=points[x+(y+squareside_length/2)*side_length]/3;
