@@ -47,7 +47,7 @@ char smoothing = 1;
 sem_t *thread_sem;
 sem_t parent_sem;
 
-char datamode = 1;
+char datamode = 0;
 
 int sum(int *list,int num_threads);
 void *smooth_worker(void *number);
@@ -109,7 +109,6 @@ int main(int argc,char **argsv){
 				job_que[index].y = c+squareside_length/2;
 				job_que[index].method = DIAMOND;
 				job_que[index].layer = a;
-				job_que[index].squareside_length = squareside_length;
 				index++;
 				layer_index++;
 			}
@@ -123,7 +122,6 @@ int main(int argc,char **argsv){
 				job_que[index].y = b;
 				job_que[index].method = SQUARE;
 				job_que[index].layer = a;
-				job_que[index].squareside_length = squareside_length;
 				index++;
 				layer_index++;
 			}
@@ -252,7 +250,7 @@ void *worker(void *number){
 		y = current_job.y;
 		method = current_job.method;
 		job_layer = current_job.layer;
-		squareside_length = current_job.squareside_length;
+		squareside_length = (side_length-1)/pow(2,job_layer);
 
 		if(2*job_layer+method>current_layer)
 			sem_post(&parent_sem);
