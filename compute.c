@@ -61,8 +61,7 @@ int main(int argc,char **argsv){
 		const char *noise_str = argsv[3];
 		sscanf(noise_str,"%f",&noise);
       datamode = atoi(argsv[4]);
-   }
-	if(argc==4) {
+   }else	if(argc==4) {
 		const char *thread_num_str = argsv[1];
 		num_threads = atoi(thread_num_str);
 		const char *layers_str = argsv[2];
@@ -99,7 +98,7 @@ int main(int argc,char **argsv){
 	red_vals = malloc(sizeof(float)*side_length*side_length);
 	green_vals = malloc(sizeof(float)*side_length*side_length);
 	blue_vals = malloc(sizeof(float)*side_length*side_length);
-
+   printf("%d\n",sizeof(job) );
 
 	points[0] = 0;
 	points[side_length-1] = 0;
