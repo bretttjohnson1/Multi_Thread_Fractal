@@ -15,7 +15,11 @@ and then used as the rgb values for the respective polygon.
 
 ## Render Controls;
 w,a,s,d: move terrain
+
 [spacebar],c: move terrain up and down
+
 i,j,k,l: rotate terrain
+
 r,g,b: toggle red,green, blue color map respectively
+
 -,(+ or =): render lower/higher layer respectively (only renders up to generated layers)
