@@ -227,6 +227,10 @@ int main(int argc, char **argv){
 	strcat(pstr,"output.dat");
 	printf("%s\n",pstr );
 	f = fopen(pstr,"r");
+    if(f == NULL){
+        printf("Err Missing Data\n");
+        exit(0);
+    }
 	char *p  = malloc(10);
 	size_t len;
 	getline(&p,&len,f);
@@ -265,6 +269,18 @@ int main(int argc, char **argv){
 	red_file = fopen(rstr,"r");
 	green_file = fopen(gstr,"r");
 	blue_file = fopen(bstr,"r");
+    if(red_file == NULL){
+        printf("Err Missing Data\n");
+        exit(0);
+    }
+    if(blue_file == NULL){
+        printf("Err Missing Data\n");
+        exit(0);
+    }
+    if(green_file == NULL){
+        printf("Err Missing Data\n");
+        exit(0);
+    }
 
 	float rmin = 0,gmin=0,bmin=0;
 	float rmax = 0,gmax=0,bmax=0;

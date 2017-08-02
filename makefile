@@ -1,4 +1,6 @@
+OPENGL_ARGS=-lGL -lglut -lGLU
+
 compute:
-	gcc compute.c -o compute.o -lpthread -lm -g -std=c99
+	gcc src/compute.c -o compute.o -lpthread -lm -g -std=c99
 render:
-	gcc render.c -lm -lGL -lglut -lGLU  -o render.o -lGLEW -g
+	gcc src/render.c $(OPENGL_ARGS) -lm -o render.o -g
